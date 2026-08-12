@@ -1,6 +1,8 @@
 // 撮影画面: カメラ + 位置合わせガイド + ライブ骨格表示 → 撮影で凍結して測定画面へ
+// 端末内の既存写真を読み込んで測定することもできる
 import { getGroup, VIEWS } from '../models.js';
 import { initLandmarker, detectVideoFrame, isReady } from '../pose/landmarker.js';
+import { importPhotoFile } from '../pose/photoImport.js';
 import { drawSkeleton, drawAlignmentGuide } from '../overlays/drawing.js';
 import { DEMO } from '../main.js';
 
@@ -19,7 +21,8 @@ export async function render(root, { patientId, sessionId, groupKey }, ctx) {
     <div class="cambar noprint">
       <button class="secondary small" id="flipBtn" ${DEMO ? 'style="display:none"' : ''}>カメラ切替</button>
       <button class="shutter" id="shot" disabled>撮影</button>
-      <div style="width:88px"></div>
+      <button class="secondary small" id="pickBtn">写真を選択</button>
+      <input type="file" id="pickFile" accept="image/*" style="display:none">
     </div>
     <div class="hint" id="status" style="text-align:center">${DEMO ? 'デモモード（合成データ）' : 'カメラを起動しています…'}</div>
   `;
@@ -32,9 +35,31 @@ export async function render(root, { patientId, sessionId, groupKey }, ctx) {
   let raf = 0;
   let facing = 'environment';
 
-  const goMeasure = (photoBlob, width, height, points) => {
-    ctx.nav('measure', { patientId, sessionId, groupKey, photoBlob, width, height, landmarks: points }, { replace: true });
+  const goMeasure = (photoBlob, width, height, points, source) => {
+    ctx.nav('measure', { patientId, sessionId, groupKey, photoBlob, width, height, landmarks: points, source }, { replace: true });
   };
+
+  function stopCamera() {
+    cancelAnimationFrame(raf);
+    if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+  }
+
+  // ---- 既存写真の読み込み（カメラが使えない環境でも利用可能）----
+  const pickFile = root.querySelector('#pickFile');
+  root.querySelector('#pickBtn').addEventListener('click', () => pickFile.click());
+  pickFile.addEventListener('change', async () => {
+    const file = pickFile.files[0];
+    pickFile.value = ''; // 同じ写真を選び直せるようにリセット
+    if (!file) return;
+    status.textContent = '写真を解析しています…';
+    try {
+      const { blob, width, height, points } = await importPhotoFile(file);
+      stopCamera();
+      goMeasure(blob, width, height, points, 'import');
+    } catch (e) {
+      status.innerHTML = `<span class="note-warn">写真を読み込めませんでした: ${e.message}</span>`;
+    }
+  });
 
   if (DEMO) {
     // プレビュー/開発用: カメラなしで合成ランドマークを使う
@@ -52,7 +77,7 @@ export async function render(root, { patientId, sessionId, groupKey }, ctx) {
       const sc = snap.getContext('2d');
       sc.fillStyle = '#d8d8d8'; sc.fillRect(0, 0, W, H);
       drawSkeleton(sc, points, 1, 'rgba(120,120,120,0.9)');
-      snap.toBlob((blob) => goMeasure(blob, W, H, points), 'image/jpeg', 0.8);
+      snap.toBlob((blob) => goMeasure(blob, W, H, points, 'camera'), 'image/jpeg', 0.8);
     });
     return;
   }
@@ -68,7 +93,7 @@ export async function render(root, { patientId, sessionId, groupKey }, ctx) {
         audio: false,
       });
     } catch (e) {
-      status.innerHTML = `<span class="note-warn">カメラを起動できませんでした（${e.name}）。HTTPSでアクセスしているか、カメラ許可を確認してください。</span>`;
+      status.innerHTML = `<span class="note-warn">カメラを起動できませんでした（${e.name}）。HTTPSでアクセスしているか、カメラ許可を確認してください。「写真を選択」から端末内の写真を読み込むこともできます。</span>`;
       return;
     }
     video.srcObject = stream;
@@ -80,11 +105,6 @@ export async function render(root, { patientId, sessionId, groupKey }, ctx) {
     status.textContent = '患者さんを中央の線に合わせて「撮影」を押してください';
     shotBtn.disabled = false;
     loop();
-  }
-
-  function stopCamera() {
-    cancelAnimationFrame(raf);
-    if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
   }
 
   function loop() {
@@ -105,7 +125,7 @@ export async function render(root, { patientId, sessionId, groupKey }, ctx) {
     snap.getContext('2d').drawImage(video, 0, 0);
     const points = lastPoints; // 撮影瞬間の最新検出結果
     stopCamera();
-    snap.toBlob((blob) => goMeasure(blob, snap.width, snap.height, points), 'image/jpeg', 0.8);
+    snap.toBlob((blob) => goMeasure(blob, snap.width, snap.height, points, 'camera'), 'image/jpeg', 0.8);
   });
 
   root.querySelector('#flipBtn').addEventListener('click', () => {

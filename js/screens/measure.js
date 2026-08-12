@@ -7,7 +7,7 @@ import { demoPoints } from './capture.js';
 import { esc } from './patientList.js';
 
 export async function render(root, params, ctx) {
-  const { patientId, sessionId, groupKey, photoBlob, width, height } = params;
+  const { patientId, sessionId, groupKey, photoBlob, width, height, source = 'camera' } = params;
   const group = getGroup(groupKey);
   const items = itemsOfGroup(groupKey);
   ctx.setHeader(`測定: ${group.label}`, true);
@@ -32,7 +32,7 @@ export async function render(root, params, ctx) {
   const photoURL = URL.createObjectURL(photoBlob);
 
   root.innerHTML = `
-    ${detected ? '' : '<div class="note-warn" style="margin-bottom:10px">姿勢を自動検出できませんでした。写真上のマーカーを関節位置へドラッグして合わせてください。</div>'}
+    ${detected ? '' : `<div class="note-warn" style="margin-bottom:10px">姿勢を自動検出できませんでした。${source === 'import' ? '全身が写っている写真だと検出しやすくなります。このまま続ける場合は、' : ''}写真上のマーカーを関節位置へドラッグして合わせてください。</div>`}
     ${items.some((it) => it.manualPrimary) ? '<div class="note-warn" style="margin-bottom:10px">この項目は自動計測が不正確です。数値は参考値として表示していますので、確認・修正のうえ確定してください。</div>' : ''}
     <div class="camwrap">
       <img class="frozen" id="photo" src="${photoURL}">
@@ -46,7 +46,7 @@ export async function render(root, params, ctx) {
       </table>
     </div>
     <div class="row noprint">
-      <button class="secondary grow" id="retake">撮り直す</button>
+      <button class="secondary grow" id="retake">${source === 'import' ? '写真を選び直す' : '撮り直す'}</button>
       <button class="primary grow" id="save">確定して保存</button>
     </div>
   `;
@@ -130,7 +130,7 @@ export async function render(root, params, ctx) {
 
     const photo = {
       id: newId('ph'), sessionId, groupKey, view: group.view,
-      blob: photoBlob, width, height, createdAt: new Date().toISOString(),
+      blob: photoBlob, width, height, source, createdAt: new Date().toISOString(),
     };
     await db.put('photos', photo);
 

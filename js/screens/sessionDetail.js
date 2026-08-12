@@ -19,6 +19,9 @@ export async function render(root, { patientId, sessionId }, ctx) {
     <div class="card">
       <div class="row">
         <div class="grow"><b>進捗: ${doneCount} / ${GROUPS.length}</b> グループ</div>
+        <label style="font-size:13px">測定日
+          <input type="date" id="dateInput" value="${session.date}" style="width:auto;display:inline-block;padding:6px 8px;font-size:14px">
+        </label>
         <button class="secondary small" id="csvBtn">CSV書き出し</button>
         ${session.status !== 'completed'
           ? `<button class="primary small" id="doneBtn">${allDone ? 'セッションを完了' : '途中でも完了にする'}</button>`
@@ -69,6 +72,15 @@ export async function render(root, { patientId, sessionId }, ctx) {
       ctx.nav('capture', { patientId, sessionId, groupKey: nextTarget }));
     root.querySelector('.card').after(bar);
   }
+
+  // 過去の写真を取り込む場合に、その撮影日へ変更できるようにする
+  root.querySelector('#dateInput').addEventListener('change', async (e) => {
+    if (!e.target.value) return;
+    session.date = e.target.value;
+    await db.put('sessions', session);
+    ctx.setHeader(`${patient.name} さん ${session.date}`, true);
+    ctx.toast('測定日を変更しました');
+  });
 
   root.querySelector('#csvBtn').addEventListener('click', async () => {
     await exportSessionCsv(patientId, sessionId);
