@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>O'Tree 姿勢・可動域測定</title>
+  <meta name="theme-color" content="#009b94">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="./css/app.css">
+  <script src="./vendor/jspdf/jspdf.umd.min.js" defer></script>
+  <script src="./vendor/html2canvas/html2canvas.min.js" defer></script>
+</head>
+<body>
+  <header class="appbar">
+    <button class="back" id="backBtn" style="display:none">‹ 戻る</button>
+    <h1 id="title">O'Tree 姿勢・可動域測定</h1>
+  </header>
+  <main id="app"></main>
+  <div id="toast"></div>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
