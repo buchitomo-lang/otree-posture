@@ -1,5 +1,5 @@
 // Service Worker: アプリ本体・AIモデル・ライブラリを全てキャッシュしてオフライン動作を実現
-const CACHE = 'otree-posture-v2';
+const CACHE = 'otree-posture-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -27,6 +27,7 @@ const ASSETS = [
   './vendor/mediapipe/wasm/vision_wasm_internal.js',
   './vendor/mediapipe/wasm/vision_wasm_internal.wasm',
   './vendor/jspdf/jspdf.umd.min.js',
+  './vendor/heic2any/heic2any.min.js',
   './vendor/html2canvas/html2canvas.min.js',
   './icons/icon-192.png',
   './icons/icon-512.png',

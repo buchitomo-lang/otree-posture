@@ -168,6 +168,24 @@ ul.list li .sub { font-size: 13px; color: #999; margin-top: 2px; }
   font-weight: 700;
 }
 
+/* 写真のドラッグ＆ドロップ領域 */
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  color: #aaa;
+  margin-bottom: 10px;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.dropzone b { font-size: 14px; font-weight: 600; }
+.dropzone.over {
+  border-color: var(--teal);
+  background: var(--teal-light);
+  color: var(--teal-dark);
+}
+.dropzone.over .hint { color: var(--teal-dark); }
+
 /* measure values */
 table.vals { width: 100%; border-collapse: collapse; }
 table.vals th, table.vals td {
@@ -268,6 +286,24 @@ table.vals input.valinput {
   max-width: 420px;
   max-height: 85vh;
   overflow-y: auto;
+}
+
+#updateBanner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--teal);
+  border-radius: 999px;
+  padding: 8px 8px 8px 18px;
+  font-size: 14px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  z-index: 250;
+  white-space: nowrap;
 }
 
 #toast {

@@ -1,5 +1,5 @@
 // 撮影画面: カメラ + 位置合わせガイド + ライブ骨格表示 → 撮影で凍結して測定画面へ
-// 端末内の既存写真を読み込んで測定することもできる
+// 端末内の既存写真（選択 or ドラッグ＆ドロップ）を読み込んで測定することもできる
 import { getGroup, VIEWS } from '../models.js';
 import { initLandmarker, detectVideoFrame, isReady } from '../pose/landmarker.js';
 import { importPhotoFile } from '../pose/photoImport.js';
@@ -22,7 +22,12 @@ export async function render(root, { patientId, sessionId, groupKey }, ctx) {
       <button class="secondary small" id="flipBtn" ${DEMO ? 'style="display:none"' : ''}>カメラ切替</button>
       <button class="shutter" id="shot" disabled>撮影</button>
       <button class="secondary small" id="pickBtn">写真を選択</button>
-      <input type="file" id="pickFile" accept="image/*" style="display:none">
+      <input type="file" id="pickFile" style="display:none"
+             accept="image/*,.jpg,.jpeg,.png,.heic,.heif">
+    </div>
+    <div class="dropzone noprint" id="dropzone">
+      <b>写真をここにドラッグ＆ドロップ</b>
+      <div class="hint">フォルダから写真をそのまま持ってこられます（JPEG / PNG / HEIC 対応）</div>
     </div>
     <div class="hint" id="status" style="text-align:center">${DEMO ? 'デモモード（合成データ）' : 'カメラを起動しています…'}</div>
   `;
@@ -30,10 +35,16 @@ export async function render(root, { patientId, sessionId, groupKey }, ctx) {
   const ov = root.querySelector('#ov');
   const shotBtn = root.querySelector('#shot');
   const status = root.querySelector('#status');
+  const dropzone = root.querySelector('#dropzone');
   let lastPoints = null;
   let stream = null;
   let raf = 0;
   let facing = 'environment';
+  let busy = false;
+
+  // 画面離脱時に解除する処理をまとめる（カメラ停止・イベント解除）
+  const cleanups = [];
+  root._cleanup = () => cleanups.forEach((fn) => { try { fn(); } catch {} });
 
   const goMeasure = (photoBlob, width, height, points, source) => {
     ctx.nav('measure', { patientId, sessionId, groupKey, photoBlob, width, height, landmarks: points, source }, { replace: true });
@@ -45,20 +56,63 @@ export async function render(root, { patientId, sessionId, groupKey }, ctx) {
   }
 
   // ---- 既存写真の読み込み（カメラが使えない環境でも利用可能）----
-  const pickFile = root.querySelector('#pickFile');
-  root.querySelector('#pickBtn').addEventListener('click', () => pickFile.click());
-  pickFile.addEventListener('change', async () => {
-    const file = pickFile.files[0];
-    pickFile.value = ''; // 同じ写真を選び直せるようにリセット
-    if (!file) return;
-    status.textContent = '写真を解析しています…';
+  async function handleFile(file) {
+    if (!file || busy) return;
+    busy = true;
+    dropzone.classList.remove('over');
     try {
-      const { blob, width, height, points } = await importPhotoFile(file);
+      const { blob, width, height, points } = await importPhotoFile(file, (msg) => { status.textContent = msg; });
       stopCamera();
       goMeasure(blob, width, height, points, 'import');
     } catch (e) {
-      status.innerHTML = `<span class="note-warn">写真を読み込めませんでした: ${e.message}</span>`;
+      status.innerHTML = `<span class="note-warn">${e.message}</span>`;
+      busy = false;
     }
+  }
+
+  const pickFile = root.querySelector('#pickFile');
+  root.querySelector('#pickBtn').addEventListener('click', () => pickFile.click());
+  pickFile.addEventListener('change', () => {
+    const file = pickFile.files[0];
+    pickFile.value = ''; // 同じ写真を選び直せるようにリセット
+    handleFile(file);
+  });
+
+  // ---- ドラッグ＆ドロップ ----
+  // 画面外に落としたときにブラウザが写真を開いてしまうのを防ぐ
+  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  const onWindowDragOver = (e) => e.preventDefault();
+  const onWindowDrop = (e) => e.preventDefault();
+  window.addEventListener('dragover', onWindowDragOver);
+  window.addEventListener('drop', onWindowDrop);
+  cleanups.push(() => {
+    window.removeEventListener('dragover', onWindowDragOver);
+    window.removeEventListener('drop', onWindowDrop);
+  });
+
+  let dragDepth = 0;
+  root.addEventListener('dragenter', (e) => {
+    stop(e);
+    dragDepth++;
+    dropzone.classList.add('over');
+  });
+  root.addEventListener('dragover', (e) => {
+    stop(e);
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  });
+  root.addEventListener('dragleave', (e) => {
+    stop(e);
+    if (--dragDepth <= 0) { dragDepth = 0; dropzone.classList.remove('over'); }
+  });
+  root.addEventListener('drop', (e) => {
+    stop(e);
+    dragDepth = 0;
+    dropzone.classList.remove('over');
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    const file = dt.files && dt.files[0];
+    if (file) handleFile(file);
+    else status.innerHTML = '<span class="note-warn">写真ファイルとして受け取れませんでした。「写真を選択」からお試しください</span>';
   });
 
   if (DEMO) {
@@ -93,7 +147,7 @@ export async function render(root, { patientId, sessionId, groupKey }, ctx) {
         audio: false,
       });
     } catch (e) {
-      status.innerHTML = `<span class="note-warn">カメラを起動できませんでした（${e.name}）。HTTPSでアクセスしているか、カメラ許可を確認してください。「写真を選択」から端末内の写真を読み込むこともできます。</span>`;
+      status.innerHTML = `<span class="note-warn">カメラを起動できませんでした（${e.name}）。HTTPSでアクセスしているか、カメラ許可を確認してください。写真の読み込みはそのまま使えます。</span>`;
       return;
     }
     video.srcObject = stream;
@@ -134,13 +188,9 @@ export async function render(root, { patientId, sessionId, groupKey }, ctx) {
   });
 
   // iOS Safariはバックグラウンド移行でカメラを止めるため、復帰時に再起動する
-  const onVis = () => { if (document.visibilityState === 'visible' && !stream) startCamera(); };
+  const onVis = () => { if (document.visibilityState === 'visible' && !stream && !busy) startCamera(); };
   document.addEventListener('visibilitychange', onVis);
-
-  root._cleanup = () => {
-    stopCamera();
-    document.removeEventListener('visibilitychange', onVis);
-  };
+  cleanups.push(stopCamera, () => document.removeEventListener('visibilitychange', onVis));
 
   startCamera();
 }

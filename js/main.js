@@ -60,8 +60,22 @@ async function render() {
 
 backBtn.addEventListener('click', back);
 
+// アプリの更新案内。測定の途中で勝手に再読み込みしないよう、押されたときだけ更新する
+function showUpdateBanner() {
+  if (document.getElementById('updateBanner')) return;
+  const el = document.createElement('div');
+  el.id = 'updateBanner';
+  el.innerHTML = '<span>アプリの新しいバージョンがあります</span><button class="primary small">更新する</button>';
+  el.querySelector('button').addEventListener('click', () => location.reload());
+  document.body.appendChild(el);
+}
+
 if ('serviceWorker' in navigator && !DEMO) {
+  const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('./sw.js').catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController) showUpdateBanner(); // 初回インストール時は案内不要
+  });
 }
 
 nav('patients', {}, { clearStack: true });
