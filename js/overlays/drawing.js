@@ -49,6 +49,18 @@ export function drawAlignmentGuide(ctx, w, h) {
   ctx.restore();
 }
 
+// ポインターが乗っている小さいマーカー（移動できない関節）を目立たせる
+export function drawLandmarkHighlight(ctx, point, scale) {
+  const x = point.x * scale, y = point.y * scale;
+  ctx.beginPath();
+  ctx.arc(x, y, 10, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(224,178,181,0.45)';
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#e0b2b5';
+  ctx.stroke();
+}
+
 // 測定画面のドラッグハンドル（補正対象ランドマークを大きめの円で表示）
 export function drawHandles(ctx, points, handleIdxs, scale, activeIdx = -1) {
   for (const i of handleIdxs) {

@@ -168,6 +168,39 @@ ul.list li .sub { font-size: 13px; color: #999; margin-top: 2px; }
   font-weight: 700;
 }
 
+/* マーカーの部位名を示す吹き出し */
+.camwrap .lmtip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 14px));
+  background: rgba(60, 60, 60, .94);
+  color: #fff;
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 6px 12px;
+  border-radius: 9px;
+  pointer-events: none;
+  max-width: 260px;
+  text-align: center;
+  z-index: 5;
+}
+.camwrap .lmtip.below { transform: translate(-50%, 14px); }
+.camwrap .lmtip .sub { font-size: 11px; opacity: .8; margin-top: 1px; }
+.camwrap .lmtip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  margin-left: -6px;
+  border: 6px solid transparent;
+  border-top-color: rgba(60, 60, 60, .94);
+  top: 100%;
+}
+.camwrap .lmtip.below::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: rgba(60, 60, 60, .94);
+}
+
 /* 写真のドラッグ＆ドロップ領域 */
 .dropzone {
   border: 2px dashed var(--border);

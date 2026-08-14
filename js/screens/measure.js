@@ -1,8 +1,8 @@
 // 測定画面: 凍結写真 + 関節マーカーのドラッグ補正 + 数値の手動入力 → 保存
 import * as db from '../db.js';
 import { getGroup, itemsOfGroup, newId, unitLabel } from '../models.js';
-import { computeItem } from '../pose/calculations.js';
-import { drawSkeleton, drawHandles } from '../overlays/drawing.js';
+import { computeItem, LANDMARK_NAMES } from '../pose/calculations.js';
+import { drawSkeleton, drawHandles, drawLandmarkHighlight } from '../overlays/drawing.js';
 import { demoPoints } from './capture.js';
 import { esc } from './patientList.js';
 
@@ -37,8 +37,12 @@ export async function render(root, params, ctx) {
     <div class="camwrap">
       <img class="frozen" id="photo" src="${photoURL}">
       <canvas class="overlay" id="ov" width="${width}" height="${height}"></canvas>
+      <div class="lmtip" id="lmtip" hidden></div>
     </div>
-    <div class="hint" style="text-align:center;margin:8px 0">○マーカーをドラッグすると値が再計算されます</div>
+    <div class="hint" style="text-align:center;margin:8px 0">
+      ○マーカーをドラッグすると値が再計算されます<br>
+      マーカーにポインターを合わせる（タッチの場合はタップ）と、どの部位かを表示します。左右は患者さんから見た左右です
+    </div>
     <div class="card">
       <table class="vals">
         <thead><tr><th>項目</th><th style="text-align:right">値</th><th>単位</th></tr></thead>
@@ -80,43 +84,118 @@ export async function render(root, params, ctx) {
     }
   }
 
-  let activeHandle = -1;
+  const tip = root.querySelector('#lmtip');
+  let activeHandle = -1;   // ドラッグ中のハンドル
+  let hoverIdx = -1;       // ポインターが乗っているランドマーク
+  let tipTimer = 0;
+
   function draw() {
     octx.clearRect(0, 0, width, height);
     drawSkeleton(octx, points, 1, 'rgba(0,155,148,0.45)');
-    drawHandles(octx, points, handleSet, 1, activeHandle);
+    if (hoverIdx >= 0 && !handleSet.includes(hoverIdx)) {
+      drawLandmarkHighlight(octx, points[hoverIdx], 1);
+    }
+    drawHandles(octx, points, handleSet, 1, activeHandle >= 0 ? activeHandle : hoverIdx);
   }
   draw();
+
+  // 各ハンドルが、この写真のどの測定項目に使われているかを示す
+  function itemsUsing(idx) {
+    return items.filter((it) => it.handles.includes(idx)).map((it) => it.label);
+  }
+
+  function showTip(idx, autoHide) {
+    const r = ov.getBoundingClientRect();
+    if (!r.width) return;
+    const x = (points[idx].x / width) * r.width;
+    const y = (points[idx].y / height) * r.height;
+    const used = itemsUsing(idx);
+    tip.innerHTML = `<b>${esc(LANDMARK_NAMES[idx] ?? '関節')}</b>`
+      + (used.length ? `<div class="sub">ドラッグで補正: ${esc(used.join('・'))}</div>`
+                     : '<div class="sub">この写真では計算に使いません</div>');
+    tip.hidden = false;
+    // 写真の上端に近いときは吹き出しを下側に出す
+    tip.classList.toggle('below', y < 56);
+    tip.style.left = Math.max(60, Math.min(r.width - 60, x)) + 'px';
+    tip.style.top = y + 'px';
+    clearTimeout(tipTimer);
+    if (autoHide) tipTimer = setTimeout(hideTip, 2600);
+  }
+  function hideTip() {
+    clearTimeout(tipTimer);
+    tip.hidden = true;
+  }
 
   const toCanvas = (e) => {
     const r = ov.getBoundingClientRect();
     return { x: (e.clientX - r.left) * (width / r.width), y: (e.clientY - r.top) * (height / r.height) };
   };
-  ov.addEventListener('pointerdown', (e) => {
+
+  // 一番近いマーカーを選ぶ。ハンドルは掴みやすいよう許容範囲を広げ、少しだけ優先する
+  // （頭部のように点が密集する場所でも、明らかに近い小さいマーカーはきちんと選べる）
+  function findLandmark(e) {
     const p = toCanvas(e);
-    let best = -1, bestD = 40 * (width / ov.getBoundingClientRect().width); // 指タッチ許容半径
-    for (const i of handleSet) {
+    const scale = width / ov.getBoundingClientRect().width; // 画面px→写真px
+    let best = -1, bestScore = Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const isHandle = handleSet.includes(i);
+      if (!isHandle && (points[i].visibility ?? 1) < 0.3) continue; // 表示されていない点は対象外
       const d = Math.hypot(points[i].x - p.x, points[i].y - p.y);
-      if (d < bestD) { bestD = d; best = i; }
+      const limit = (isHandle ? 40 : 20) * scale;                   // 指タッチ許容半径
+      if (d > limit) continue;
+      const score = isHandle ? d - 10 * scale : d;                  // ハンドルへの優先分
+      if (score < bestScore) { bestScore = score; best = i; }
     }
-    if (best >= 0) {
-      activeHandle = best;
+    return best;
+  }
+
+  ov.addEventListener('pointerdown', (e) => {
+    const idx = findLandmark(e);
+    if (idx < 0) { hoverIdx = -1; hideTip(); draw(); return; }
+    hoverIdx = idx;
+    if (handleSet.includes(idx)) {
+      activeHandle = idx;
       ov.setPointerCapture(e.pointerId);
-      draw();
+      showTip(idx, false);                 // ドラッグ中は出したままにする
+    } else {
+      showTip(idx, e.pointerType !== 'mouse'); // タッチは一定時間で自動的に消す
     }
-  });
-  ov.addEventListener('pointermove', (e) => {
-    if (activeHandle < 0) return;
-    const p = toCanvas(e);
-    points[activeHandle].x = p.x;
-    points[activeHandle].y = p.y;
-    points[activeHandle].visibility = 1;
-    recompute();
     draw();
   });
-  const endDrag = () => { if (activeHandle >= 0) { activeHandle = -1; draw(); } };
+
+  ov.addEventListener('pointermove', (e) => {
+    if (activeHandle >= 0) {
+      const p = toCanvas(e);
+      points[activeHandle].x = p.x;
+      points[activeHandle].y = p.y;
+      points[activeHandle].visibility = 1;
+      recompute();
+      showTip(activeHandle, false);
+      draw();
+      return;
+    }
+    if (e.pointerType !== 'mouse') return;  // タッチではホバーが無いためタップのみ
+    const idx = findLandmark(e);
+    if (idx === hoverIdx) return;
+    hoverIdx = idx;
+    if (idx >= 0) showTip(idx, false); else hideTip();
+    draw();
+  });
+
+  const endDrag = (e) => {
+    if (activeHandle < 0) return;
+    activeHandle = -1;
+    if (e && e.pointerType === 'mouse') showTip(hoverIdx, false); else hideTip();
+    draw();
+  };
   ov.addEventListener('pointerup', endDrag);
   ov.addEventListener('pointercancel', endDrag);
+  ov.addEventListener('pointerleave', () => {
+    if (activeHandle >= 0) return;
+    hoverIdx = -1;
+    hideTip();
+    draw();
+  });
 
   root.querySelector('#retake').addEventListener('click', () => {
     ctx.nav('capture', { patientId, sessionId, groupKey }, { replace: true });

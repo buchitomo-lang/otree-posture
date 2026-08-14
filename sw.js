@@ -1,5 +1,5 @@
 // Service Worker: アプリ本体・AIモデル・ライブラリを全てキャッシュしてオフライン動作を実現
-const CACHE = 'otree-posture-v3';
+const CACHE = 'otree-posture-v4';
 const ASSETS = [
   './',
   './index.html',
