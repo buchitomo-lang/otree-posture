@@ -1,7 +1,7 @@
 // 測定画面: 凍結写真 + 関節マーカーのドラッグ補正 + 数値の手動入力 → 保存
 import * as db from '../db.js';
 import { getGroup, itemsOfGroup, newId, unitLabel } from '../models.js';
-import { computeItem, LANDMARK_NAMES } from '../pose/calculations.js';
+import { computeItem, LANDMARK_NAMES, LANDMARK_ANATOMY } from '../pose/calculations.js';
 import { drawSkeleton, drawHandles, drawLandmarkHighlight } from '../overlays/drawing.js';
 import { demoPoints } from './capture.js';
 import { esc } from './patientList.js';
@@ -41,7 +41,8 @@ export async function render(root, params, ctx) {
     </div>
     <div class="hint" style="text-align:center;margin:8px 0">
       ○マーカーをドラッグすると値が再計算されます<br>
-      マーカーにポインターを合わせる（タッチの場合はタップ）と、どの部位かを表示します。左右は患者さんから見た左右です
+      マーカーにポインターを合わせる（タッチの場合はタップ）と、どの部位かを表示します。左右は患者さんから見た左右です<br>
+      （　）内は対応する解剖学的名称の目安です
     </div>
     <div class="card">
       <table class="vals">
@@ -110,7 +111,9 @@ export async function render(root, params, ctx) {
     const x = (points[idx].x / width) * r.width;
     const y = (points[idx].y / height) * r.height;
     const used = itemsUsing(idx);
+    const anatomy = LANDMARK_ANATOMY[idx];
     tip.innerHTML = `<b>${esc(LANDMARK_NAMES[idx] ?? '関節')}</b>`
+      + (anatomy ? `<span class="anat">（${esc(anatomy)}）</span>` : '')
       + (used.length ? `<div class="sub">ドラッグで補正: ${esc(used.join('・'))}</div>`
                      : '<div class="sub">この写真では計算に使いません</div>');
     tip.hidden = false;
